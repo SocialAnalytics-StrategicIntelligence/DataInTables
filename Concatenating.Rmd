@@ -1,0 +1,76 @@
+<img src="https://i.imgur.com/6U6q5jQ.png"/>
+
+# Concatenating Data Frames in R
+
+Concatenating is an operation at the data frame level. It is an easy operation when all the data frames have the **same** column names, and in the same position  (vertical concatenation).
+
+Let me bring some data frames:
+
+
+```{r}
+rm(list = ls())
+list_of_files <- list.files(path = "FilesToConcatenate",
+                            recursive = TRUE,
+                            pattern = "\\P.csv$",
+                            full.names = TRUE)
+list_of_files
+```
+
+Now, I will create a list of data frames:
+
+
+```{r}
+dfs = lapply(list_of_files, read.csv)
+```
+
+Let me check if the column names are the same:
+
+
+```{r}
+for (df in dfs){
+    print(names(df))}
+```
+
+In this situation, I need to work on the column names of the last one:
+
+
+```{r}
+# keep in the rigth order
+dfs[[4]]['Combatants']=NA
+dfs[[4]]=dfs[[4]][,c('War', 'Deathrange', 'Date', 'Combatants', 'Location', 'Notes')]
+```
+
+Let's verify:
+
+
+```{r}
+# do this again:
+for (df in dfs)
+    print(names(df))
+```
+
+Now we can append them, and count the amount of rows:
+
+
+```{r}
+allWars=do.call(rbind, dfs)
+dim(allWars)
+```
+
+
+
+```{r}
+# this is it:
+
+head(allWars,20)
+```
+
+You can save this now. This still needs cleaning and formatting.
+
+
+```{r}
+# pathAndName=file.path.join('FilesToAppend','AllWars_messy_R.csv')
+# allWars.to_csv(pathAndName,index=False)
+```
+
+

@@ -1,0 +1,187 @@
+<img src="https://i.imgur.com/6U6q5jQ.png"/>
+
+# Merging Data Frames in R
+
+The Merging stage is an operation at the data frame level (not a cell operation). 
+
+The merging process combines **TWO** data frames, if and only if, they each have a common column whose cell values represent the same, and are written exactly the same. Unmatched values will not be part of the output. If you have messy data, you need to clean at least those **key** columns for the match to work.
+
+Let's see some data:
+
+
+```{r}
+
+allFree=readRDS(url("https://github.com/PythonVersusR/OperationsFormatting/raw/main/DataFiles/allFree.rds"))  
+allFree
+
+```
+
+Now, let's bring this other one:
+
+
+```{r}
+
+library(rvest)
+
+linkCIA="https://www.cia.gov/the-world-factbook/field/military-expenditures/country-comparison"
+library(polite)
+
+page <- linkCIA %>% 
+  bow() %>% 
+  scrape()
+#getting  table
+mil <- page%>%html_nodes("table")%>%html_table()
+
+```
+
+
+```{r}
+# the only one
+mil[[1]]
+```
+
+Let's check format:
+
+
+```{r}
+str(mil[[1]])
+```
+
+Let's keep the columns we need from the data frame:
+
+
+```{r}
+mil[[1]]=mil[[1]][,c(2,3)]
+```
+
+Let's create a new data frame, while renaming the second column with a simpler name:
+
+
+```{r}
+mili=mil[[1]]
+names(mili)[2]="mili_pctGDP"
+head(mili)
+```
+
+## Deciding keys
+
+Obviously, _Country_:
+
+
+
+```{r}
+names(mili)
+names(allFree)
+```
+
+
+
+We should _normalize_ the **key** columns:
+
+
+```{r}
+mili$Country=toupper(mili$Country)
+```
+
+## Basic merge
+
+The basic merge works like this:
+
+
+```{r}
+# Which country has more rows?
+c(dim(mili)[1],dim(allFree)[1])
+```
+
+When row counts differ, you can expect the merge will give at most the lowest amount of rows between those two. Let's see:
+
+
+```{r}
+dim(merge(mili, allFree,by.x ='Country',by.y = 'Country'))
+```
+
+## Fuzzy matching
+
+Currently, that is the count of rows in the merge. Let's explore the unmatched keys:
+
+
+```{r}
+InMiliNotInFree=setdiff(mili$Country,allFree$Country)
+sort(InMiliNotInFree)
+```
+
+
+```{r}
+InFreeUnmatched=setdiff(allFree$Country,mili$Country)
+sort(InFreeUnmatched)
+```
+
+Let's try to match strings that are NOT equally written. You need to previously install:
+* thefuzz (use _pip install thefuzz_)
+* python-Levenshtein  (use _pip python-Levenshtein_)
+
+```{r}
+firstvector<-InFreeUnmatched
+secondvector<-InMiliNotInFree
+
+match<-character()
+mindist<-integer()
+sortedmatches<-character()
+
+for (i in 1:length(InFreeUnmatched) ) {
+  matchdist<-stringdist::stringdist(InFreeUnmatched[i],InMiliNotInFree,method = 'jaccard')
+  mindist[i]=min(matchdist)
+  match[i]<-InMiliNotInFree[which.min(matchdist)] 
+}
+res<-data.frame(input=InFreeUnmatched,match_maybe=match,divergence=mindist,  stringsAsFactors = F)
+```
+```{r}
+res=res[order(res$divergence),]
+res
+```
+```{r}
+best=res[res$divergence<=0.4,]
+best
+```
+```{r}
+
+best=rbind(best,c('CZECH REPUBLIC','CZECHIA',NA))
+best
+```
+
+Make the replacements:
+
+```{r}
+
+allFree$Country[match(best$input, allFree$Country)] <- best$match_maybe
+
+```
+
+
+
+
+We reached our best situation, then:
+
+
+```{r}
+# in case you have different names in the matching columns:
+freemili=merge(mili, allFree,by.x ='Country',by.y = 'Country')
+freemili
+```
+
+We can save this for R and Python :
+
+
+```{r}
+
+library(reticulate)
+#py_install("pandas")
+pd <- import("pandas")
+pd$to_pickle(freemili,filepath_or_buffer=file.path('FilesToMerge',"FreeAndMili_R.pkl"))
+```
+
+
+```{r}
+saveRDS(freemili,file=file.path('FilesToMerge','FreeAndMili.RDS'))
+```
+

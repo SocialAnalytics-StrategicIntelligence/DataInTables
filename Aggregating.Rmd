@@ -1,0 +1,145 @@
+<img src="https://i.imgur.com/6U6q5jQ.png"/>
+
+# Data Aggregating in R
+
+
+Sometimes, you need to summarize the unit of analysis at a higher level. This is when you need the aggregating capabilities in R.
+
+We will use data from [here](https://covid.saude.gov.br/):
+
+
+
+
+I downloaded the data for 2022 in the _FilesToAggregate_ folder:
+
+
+```{r}
+
+rm(list = ls())
+
+list_of_files <- list.files(path = "FilesToAggregate",
+                            recursive = TRUE,
+                            pattern = "2022.csv$",
+                            full.names = TRUE)
+
+list_of_files
+```
+
+Let me read those files into a list:
+
+```{r}
+dfs = lapply(list_of_files, read.csv,sep=';')
+
+typeof(dfs)
+```
+
+
+
+Let's check the names before appending:
+
+
+```{r}
+for (df in dfs){
+    cat('\n')
+    print(names(df))}
+```
+
+As the names look good, we proceed:
+
+
+```{r}
+covid=do.call(rbind, dfs)
+```
+
+We have several rows:
+
+```{r}
+# rows columns
+dim(covid)
+```
+Let's keep the columns needed:
+
+
+```{r}
+toSelect=c('regiao', 'estado', 'municipio','data', 'semanaEpi','casosNovos', 'obitosNovos')
+covid=covid[,toSelect]
+```
+
+Let's see:
+
+```{r}
+str(covid)
+```
+
+Let's replace those "" as NA, and keep the complete data
+
+```{r}
+covid[covid=='']=NA
+covid=covid[complete.cases(covid),]
+dim(covid)
+```
+
+
+
+```{r}
+# you have the data at the municipal level
+
+head(covid)
+```
+
+There are enough data, let's see different aggregation alternatives:
+
+
+```{r}
+# sum of cases by estado
+casesSumByState=aggregate(data=covid,casosNovos~estado,sum)
+casesSumByState
+```
+
+
+```{r}
+# sum of cases by estado and week
+casesSumByStateAndWeek=aggregate(data=covid,casosNovos~estado + semanaEpi,sum)
+
+head(casesSumByStateAndWeek,30)
+```
+
+
+```{r}
+# sum and mean of cases by estado and week
+casesSumAndMeanByStateAndWeek=aggregate(data=covid,casosNovos~estado + semanaEpi,
+          function(x) c(mean = mean(x), sum = sum(x) ) )
+head(casesSumAndMeanByStateAndWeek,30)
+```
+
+
+```{r}
+# sum of cases and deaths by estado
+
+CasesAndDeathsByState=aggregate(data=covid,
+                                cbind(casosNovos,obitosNovos)~estado + semanaEpi,
+                                sum)
+
+head(CasesAndDeathsByState,30)
+```
+
+
+```{r}
+# sum and mean of cases and deaths by estado and week
+
+CasesAndDeathsMeanAndSumByStateAndWeek=aggregate(data=covid,
+                                        cbind(casosNovos,obitosNovos)~estado + semanaEpi,
+                                        function(x) c(mean = mean(x), sum = sum(x) ) )
+
+head(CasesAndDeathsByState,30)
+```
+We can save this if needed.
+
+```{r, eval=FALSE}
+
+write.csv(CasesAndDeathsMeanAndSumByStateAndWeek,
+          file.path("FilesToAggregate","Aggregated_Covid.csv"))
+
+
+```
+

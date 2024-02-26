@@ -1,0 +1,166 @@
+<img src="https://i.imgur.com/6U6q5jQ.png"/>
+
+# Data Reshaping in R
+
+
+Let me get the data on dengue from [Peru](https://www.datosabiertos.gob.pe/dataset/vigilancia-epidemiol%C3%B3gica-de-dengue):
+
+
+```{r}
+rm(list = ls())
+##
+dengue = read.csv(file.path('FilesToReshape' , "datos_abiertos_vigilancia_dengue.csv"))
+head(dengue)
+```
+
+This is a big file but R did not send any warning. Let's continue:
+
+```{r}
+toSelect=c('departamento', 'provincia', 'distrito','ano', 'semana', 'sexo','enfermedad')
+dengue=dengue[,toSelect]
+```
+
+R did not send warnings, but has problems:
+
+```{r}
+table(dengue$departamento)
+```
+
+Let's solve what we see:
+```{r}
+dengue=dengue[dengue$departamento!='A',]
+
+dengue[dengue=='\\N']=NA
+
+# complete data
+dengue=dengue[complete.cases(dengue),]
+```
+
+Now we have:
+```{r}
+
+str(dengue)
+```
+
+The data is about people, but since there is no identifier for a person, it is possible that rows are repeated:
+
+```{r}
+head(dengue[duplicated(dengue),],20)
+```
+
+To ease the count, we could add a column of ones:
+
+```{r}
+dengue['case']=1
+```
+
+At this stage, we should aggregate the data:
+
+```{r}
+CasesByWeek= aggregate(data=dengue,
+                       case~ departamento + provincia+ distrito + ano + semana + sexo + enfermedad,
+                       sum)
+head(CasesByWeek,40)
+```
+
+
+## Reshaping
+
+### From Long to Wide
+
+The object *CasesByWeek* shows the values in one column, and the other column serve as identifier (an index). Let's make a simple wide version:
+
+
+```{r}
+reshape2::dcast(CasesByWeek, departamento ~ enfermedad, value.var="case",sum)
+```
+
+So we have something wrong we did not know:
+
+```{r}
+
+dengue[grepl('II', dengue$enfermedad),]
+```
+
+We will get rid of those rows, and rebuild _CasesByWeek_:
+
+```{r}
+dengue=dengue[!grepl('II', dengue$enfermedad),]
+CasesByWeek= aggregate(data=dengue,
+                       case~ departamento + provincia+ distrito + ano + semana + sexo + enfermedad,
+                       sum)
+```
+
+Now we can retry the reshaping with one key index:
+
+```{r}
+reshape2::dcast(CasesByWeek, departamento ~ enfermedad, value.var="case",sum)
+```
+
+The reshaping with two keys:
+
+```{r}
+
+reshape2::dcast(CasesByWeek, departamento + provincia ~ enfermedad, value.var="case",sum)
+```
+
+The reshaping with two keys and two multi columns:
+
+```{r}
+reshape2::dcast(CasesByWeek, departamento + provincia ~ enfermedad + sexo, value.var="case",sum)
+
+```
+
+Have you noticed that the more keys the more missing values?
+
+Let's keep this last one:
+
+
+```{r}
+CasesByWeek_Wide=reshape2::dcast(CasesByWeek,
+                                 departamento + provincia ~ enfermedad + sexo,
+                                 value.var="case",
+                                 sum)
+CasesByWeek_Wide
+```
+
+We could have simpler column names:
+
+```{r}
+names(CasesByWeek_Wide)
+```
+
+Re formatting:
+
+```{r}
+library(magrittr)
+names(CasesByWeek_Wide)%>%
+    stringr::str_to_title()%>%
+    stringr::str_replace_all('\\s','')%>%
+    stringr::str_replace_all('Dengue','')
+
+```
+
+Renaming the columns:
+
+```{r}
+names(CasesByWeek_Wide)=names(CasesByWeek_Wide)%>%
+                        stringr::str_to_title()%>%
+                        stringr::str_replace_all('\\s','')%>%
+                        stringr::str_replace_all('Dengue','')
+
+CasesByWeek_Wide
+```
+
+### Wide to Long
+
+We should be able to transfor this wide version into a long one:
+
+
+```{r}
+
+CasesByWeek_Long=reshape2::melt(CasesByWeek_Wide, id.vars=c("Departamento","Provincia"))
+CasesByWeek_Long
+```
+
+
